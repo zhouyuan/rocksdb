@@ -14,77 +14,120 @@
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/file_reader_writer.h"
+#include "errno.h"
+#include <unistd.h>
+#include <iostream>
 
 namespace rocksdb {
 namespace log {
 
 Writer::Writer(unique_ptr<WritableFileWriter>&& dest,
-               uint64_t log_number, bool recycle_log_files)
+               uint64_t log_number, bool recycle_log_files, bool persistent)
     : dest_(std::move(dest)),
       block_offset_(0),
       log_number_(log_number),
-      recycle_log_files_(recycle_log_files) {
+      recycle_log_files_(recycle_log_files),
+      persistent_(persistent){
   for (int i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
     type_crc_[i] = crc32c::Value(&t, 1);
   }
+  if(persistent_)
+  {
+      std::string str ("/mnt/pmem/rocks/rocksLog");
+      std::string filename = str + std::to_string(log_number);
+
+      if (access(filename.c_str(), F_OK) != 0) {
+          plp = pmemlog_create(filename.c_str(), (size_t)(1 << 30), 0666);
+
+          if (plp == NULL) {
+              std::cout << "Error create " << errno << std::endl;
+          } else {
+              //std::cout << "Create OK" << std::endl;
+          }
+      }
+      else
+      {
+          plp = pmemlog_open(filename.c_str());
+          if (plp == NULL) {
+              std::cout << "Error open " << errno << std::endl;
+          } else {
+              //std::cout << "Open OK" << std::endl;
+          }
+      }
+  }
 }
 
 Writer::~Writer() {
+    if(persistent_)
+    {
+        pmemlog_close(plp);
+
+    }
 }
 
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();
+  if(persistent_)
+    {
+        if (pmemlog_append(plp, slice.data_, slice.size_) < 0) {
+            std::cout <<  "pmemlog_append error" << std::endl;
+            return Status::Corruption();
+          }
 
-  // Header size varies depending on whether we are recycling or not.
-  const int header_size =
-      recycle_log_files_ ? kRecyclableHeaderSize : kHeaderSize;
+        return Status::OK();
+          }
+    else{
+      // Header size varies depending on whether we are recycling or not.
+      const int header_size =
+          recycle_log_files_ ? kRecyclableHeaderSize : kHeaderSize;
 
-  // Fragment the record if necessary and emit it.  Note that if slice
-  // is empty, we still want to iterate once to emit a single
-  // zero-length record
-  Status s;
-  bool begin = true;
-  do {
-    const int64_t leftover = kBlockSize - block_offset_;
-    assert(leftover >= 0);
-    if (leftover < header_size) {
-      // Switch to a new block
-      if (leftover > 0) {
-        // Fill the trailer (literal below relies on kHeaderSize and
-        // kRecyclableHeaderSize being <= 11)
-        assert(header_size <= 11);
-        dest_->Append(
-            Slice("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", leftover));
-      }
-      block_offset_ = 0;
+      // Fragment the record if necessary and emit it.  Note that if slice
+      // is empty, we still want to iterate once to emit a single
+      // zero-length record
+      Status s;
+      bool begin = true;
+      do {
+        const int64_t leftover = kBlockSize - block_offset_;
+        assert(leftover >= 0);
+        if (leftover < header_size) {
+          // Switch to a new block
+          if (leftover > 0) {
+            // Fill the trailer (literal below relies on kHeaderSize and
+            // kRecyclableHeaderSize being <= 11)
+            assert(header_size <= 11);
+            dest_->Append(
+                Slice("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", leftover));
+          }
+          block_offset_ = 0;
+        }
+
+        // Invariant: we never leave < header_size bytes in a block.
+        assert(static_cast<int64_t>(kBlockSize - block_offset_) >= header_size);
+
+        const size_t avail = kBlockSize - block_offset_ - header_size;
+        const size_t fragment_length = (left < avail) ? left : avail;
+
+        RecordType type;
+        const bool end = (left == fragment_length);
+        if (begin && end) {
+          type = recycle_log_files_ ? kRecyclableFullType : kFullType;
+        } else if (begin) {
+          type = recycle_log_files_ ? kRecyclableFirstType : kFirstType;
+        } else if (end) {
+          type = recycle_log_files_ ? kRecyclableLastType : kLastType;
+        } else {
+          type = recycle_log_files_ ? kRecyclableMiddleType : kMiddleType;
+        }
+
+        s = EmitPhysicalRecord(type, ptr, fragment_length);
+        ptr += fragment_length;
+        left -= fragment_length;
+        begin = false;
+      } while (s.ok() && left > 0);
+      return s;
     }
-
-    // Invariant: we never leave < header_size bytes in a block.
-    assert(static_cast<int64_t>(kBlockSize - block_offset_) >= header_size);
-
-    const size_t avail = kBlockSize - block_offset_ - header_size;
-    const size_t fragment_length = (left < avail) ? left : avail;
-
-    RecordType type;
-    const bool end = (left == fragment_length);
-    if (begin && end) {
-      type = recycle_log_files_ ? kRecyclableFullType : kFullType;
-    } else if (begin) {
-      type = recycle_log_files_ ? kRecyclableFirstType : kFirstType;
-    } else if (end) {
-      type = recycle_log_files_ ? kRecyclableLastType : kLastType;
-    } else {
-      type = recycle_log_files_ ? kRecyclableMiddleType : kMiddleType;
-    }
-
-    s = EmitPhysicalRecord(type, ptr, fragment_length);
-    ptr += fragment_length;
-    left -= fragment_length;
-    begin = false;
-  } while (s.ok() && left > 0);
-  return s;
 }
 
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {

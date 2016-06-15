@@ -23,3 +23,8 @@ rely on the details of any other header files in this package.  Those
 internal APIs may be changed without warning.
 
 Design discussions are conducted in https://www.facebook.com/groups/rocksdb.dev/
+
+## PMEMlog version
+
+This version uses libpmemlog API to maintain Write Ahead Log (WAL).
+File is created in /mnt/pmem/rocks/.

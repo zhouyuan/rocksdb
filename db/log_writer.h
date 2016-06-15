@@ -15,6 +15,7 @@
 #include "db/log_format.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
+#include <libpmemlog.h>
 
 namespace rocksdb {
 
@@ -73,7 +74,7 @@ class Writer {
   // "*dest" must be initially empty.
   // "*dest" must remain live while this Writer is in use.
   explicit Writer(unique_ptr<WritableFileWriter>&& dest,
-                  uint64_t log_number, bool recycle_log_files);
+                  uint64_t log_number, bool recycle_log_files, bool persistent = false);
   ~Writer();
 
   Status AddRecord(const Slice& slice);
@@ -86,7 +87,9 @@ class Writer {
   size_t block_offset_;       // Current offset in block
   uint64_t log_number_;
   bool recycle_log_files_;
-
+ public:
+   bool persistent_;
+ private:
   // crc32c values for all supported record types.  These are
   // pre-computed to reduce the overhead of computing the crc of the
   // record type stored in the header.
@@ -97,6 +100,7 @@ class Writer {
   // No copying allowed
   Writer(const Writer&);
   void operator=(const Writer&);
+  PMEMlogpool *plp;
 };
 
 }  // namespace log

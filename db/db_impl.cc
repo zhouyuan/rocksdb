@@ -4726,10 +4726,17 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
         //  - as long as other threads don't modify it, it's safe to read
         //    from std::deque from multiple threads concurrently.
         for (auto& log : logs_) {
-          status = log.writer->file()->Sync(db_options_.use_fsync);
-          if (!status.ok()) {
-            break;
-          }
+            if(!log.writer->persistent_)
+            {
+                status = log.writer->file()->Sync(db_options_.use_fsync);
+                if (!status.ok()) {
+                    break;
+                }
+            }
+            else
+            {
+                status = Status::OK();
+            }
         }
         if (status.ok() && need_log_dir_sync) {
           // We only sync WAL directory the first time WAL syncing is
@@ -4981,7 +4988,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
         unique_ptr<WritableFileWriter> file_writer(
             new WritableFileWriter(std::move(lfile), opt_env_opt));
         new_log = new log::Writer(std::move(file_writer), new_log_number,
-                                  db_options_.recycle_log_file_num > 0);
+                                  db_options_.recycle_log_file_num > 0, true);
       }
     }
 
@@ -5730,7 +5737,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
       impl->logs_.emplace_back(
           new_log_number,
           new log::Writer(std::move(file_writer), new_log_number,
-                          impl->db_options_.recycle_log_file_num > 0));
+                          impl->db_options_.recycle_log_file_num > 0, true));
 
       // set column family handles
       for (auto cf : column_families) {
