@@ -436,7 +436,7 @@ void BlockBasedTable::SetupCacheKeyPrefix(Rep* rep, uint64_t file_size) {
         file_size + rep->table_options.block_cache->NewId();
   }
   if (rep->table_options.persistent_cache != nullptr) {
-    GenerateCachePrefix(/*cache=*/nullptr, rep->file->file(),
+    GeneratePersistentCachePrefix(rep->table_options.persistent_cache.get(),
                         &rep->persistent_cache_key_prefix[0],
                         &rep->persistent_cache_key_prefix_size);
   }
@@ -460,6 +460,11 @@ void BlockBasedTable::GenerateCachePrefix(Cache* cc,
     *size = static_cast<size_t>(end - buffer);
   }
 }
+void BlockBasedTable::GeneratePersistentCachePrefix(PersistentCache* cc,
+   char* buffer, size_t* size) {
+     char* end = EncodeVarint64(buffer, cc->NewId());
+     *size = static_cast<size_t>(end - buffer);
+   }
 
 void BlockBasedTable::GenerateCachePrefix(Cache* cc,
     WritableFile* file, char* buffer, size_t* size) {

@@ -237,6 +237,9 @@ class BlockBasedTable : public TableReader {
   static void GenerateCachePrefix(Cache* cc,
     WritableFile* file, char* buffer, size_t* size);
 
+    static void GeneratePersistentCachePrefix(PersistentCache* cc,
+       char* buffer, size_t* size);
+
   // Helper functions for DumpTable()
   Status DumpIndexBlock(WritableFile* out_file);
   Status DumpDataBlocks(WritableFile* out_file);

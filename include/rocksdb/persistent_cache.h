@@ -44,6 +44,12 @@ class PersistentCache {
   //
   // True if the cache is configured to store uncompressed data else false
   virtual bool IsCompressed() = 0;
+
+  // Return a new numeric id.  May be used by multiple clients who are
+  // sharding the same cache to partition the key space.  Typically the
+  // client will allocate a new id at startup and prepend the id to
+  // its cache keys.
+  virtual uint64_t NewId() = 0;
 };
 
 }  // namespace rocksdb

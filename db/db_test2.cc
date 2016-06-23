@@ -1146,7 +1146,9 @@ class MockPersistentCache : public PersistentCache {
     *size = it->second.size();
     return Status::OK();
   }
-
+  uint64_t NewId() {
+  	return 0;
+  }
   bool IsCompressed() override { return is_compressed_; }
 
   port::Mutex lock_;

@@ -55,6 +55,8 @@
 #include "rocksdb/utilities/sim_cache.h"
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
+#include "utilities/persistent_cache/volatile_tier_impl.h"
+#include "utilities/persistent_cache/pmemobj_tier_impl.h"
 #include "rocksdb/write_batch.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -73,9 +75,9 @@
 #endif
 
 namespace {
-using GFLAGS::ParseCommandLineFlags;
-using GFLAGS::RegisterFlagValidator;
-using GFLAGS::SetUsageMessage;
+using gflags::ParseCommandLineFlags;
+using gflags::RegisterFlagValidator;
+using gflags::SetUsageMessage;
 
 DEFINE_string(benchmarks,
               "fillseq,"
@@ -215,6 +217,8 @@ DEFINE_bool(reverse_iterator, false,
             "Seek and then Next");
 
 DEFINE_bool(use_uint64_comparator, false, "use Uint64 user comparator");
+
+DEFINE_int32(use_persistent_cache, 1, "Use persistent tiered cache");
 
 DEFINE_int64(batch_size, 1, "Batch size");
 
@@ -2139,6 +2143,15 @@ class Benchmark {
       fprintf(stdout, "SIMULATOR CACHE STATISTICS:\n%s\n",
               std::dynamic_pointer_cast<SimCache>(cache_)->ToString().c_str());
     }
+
+if (FLAGS_use_persistent_cache == 1) {
+	BlockBasedTableOptions *opts = (BlockBasedTableOptions *)open_options_.table_factory->GetOptions();
+	auto c = std::dynamic_pointer_cast<ObjCacheTier>(opts->persistent_cache);
+
+	fprintf(stdout, "PERSISTENT CACHE STATISTICS:\n%s\n",
+	       c->PrintStats().c_str());
+}
+
   }
 
  private:
@@ -2580,6 +2593,11 @@ class Benchmark {
       block_based_options.skip_table_builder_flush =
           FLAGS_skip_table_builder_flush;
       block_based_options.format_version = 2;
+
+	if (FLAGS_use_persistent_cache == 1) {
+		block_based_options.persistent_cache = std::make_shared<ObjCacheTier>("/run/shm/rocks.obj", 16106127360);
+	}
+
       options.table_factory.reset(
           NewBlockBasedTableFactory(block_based_options));
     }

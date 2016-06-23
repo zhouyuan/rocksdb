@@ -147,6 +147,10 @@ bool VolatileCacheTier::Evict() {
   return true;
 }
 
+uint64_t VolatileCacheTier::NewId() {
+	return __sync_add_and_fetch(&last_id, 1);
+}
+
 }  // namespace rocksdb
 
 #endif

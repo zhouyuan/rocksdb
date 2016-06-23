@@ -12,6 +12,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <libpmemobj/persistent_ptr.hpp>
+#include <libpmemobj/p.hpp>
+#include <unordered_map>
 
 #include "rocksdb/cache.h"
 #include "utilities/persistent_cache/hash_table.h"
@@ -40,14 +43,38 @@
 // The eviction algorithm is LRU
 namespace rocksdb {
 
-class VolatileCacheTier : public PersistentCacheTier {
- public:
-  explicit VolatileCacheTier(
-      const bool is_compressed = true,
-      const size_t max_size = std::numeric_limits<size_t>::max())
-      : is_compressed_(is_compressed), max_size_(max_size), last_id(0) {}
+template <class T>
+struct pLRUElement {
+  explicit pLRUElement() : next_(nullptr), prev_(nullptr), refs_(0) {}
 
-  virtual ~VolatileCacheTier();
+  //virtual ~pLRUElement() { assert(!refs_); }
+
+  nvml::obj::persistent_ptr<T> next_;
+  nvml::obj::persistent_ptr<T> prev_;
+  std::atomic<size_t> refs_;
+};
+
+#define MAX_KEY_LEN 100
+#define MAX_VAL_LEN 1000
+struct root {
+
+};
+
+struct CacheData {
+
+      size_t key_size;
+      size_t value_size;
+      char key[MAX_KEY_LEN];
+      char value[1];
+};
+
+class ObjCacheTier : public PersistentCacheTier {
+ public:
+  explicit ObjCacheTier(std::string path, size_t size,
+      const bool is_compressed = true,
+      const size_t max_size = std::numeric_limits<size_t>::max());
+
+  virtual ~ObjCacheTier();
 
   // insert to cache
   Status Insert(const Slice& page_key, const char* data,
@@ -71,23 +98,10 @@ class VolatileCacheTier : public PersistentCacheTier {
   uint64_t NewId() override;
 
  private:
+	void rebuild();
   //
   // Cache data abstraction
   //
-  struct CacheData : LRUElement<CacheData> {
-    explicit CacheData(CacheData&& rhs) noexcept
-        : key(std::move(rhs.key)), value(std::move(rhs.value)) {}
-
-    explicit CacheData(const std::string& _key, const std::string& _value = "")
-        : key(_key), value(_value) {}
-
-    virtual ~CacheData() {}
-
-    const std::string key;
-    const std::string value;
-  };
-
-  static void DeleteCacheData(CacheData* data);
 
   //
   // Index and LRU definition
@@ -95,7 +109,7 @@ class VolatileCacheTier : public PersistentCacheTier {
   struct CacheDataHash {
     uint64_t operator()(const CacheData* obj) const {
       assert(obj);
-      return std::hash<std::string>()(obj->key);
+     return std::hash<std::string>()(obj->key);
     }
   };
 
@@ -103,7 +117,7 @@ class VolatileCacheTier : public PersistentCacheTier {
     bool operator()(const CacheData* lhs, const CacheData* rhs) const {
       assert(lhs);
       assert(rhs);
-      return lhs->key == rhs->key;
+      return strcmp(lhs->key, rhs->key) == 0;
     }
   };
 
@@ -124,18 +138,17 @@ class VolatileCacheTier : public PersistentCacheTier {
     }
   };
 
-  typedef EvictableHashTable<CacheData, CacheDataHash, CacheDataEqual>
-      IndexType;
-
   // Evict LRU tail
   bool Evict();
 
   const bool is_compressed_ = true;    // does it store compressed data
-  IndexType index_;                    // in-memory cache
+  std::unordered_map<std::string, nvml::obj::persistent_ptr<CacheData>> index;
   std::atomic<uint64_t> max_size_{0};  // Maximum size of the cache
   std::atomic<uint64_t> size_{0};      // Size of the cache
   Statistics stats_;
 	uint64_t last_id;
+
+	nvml::obj::pool<root> pop;
 };
 
 }  // namespace rocksdb
