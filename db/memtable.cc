@@ -56,7 +56,8 @@ ImmutableMemTableOptions::ImmutableMemTableOptions(
       max_successive_merges(mutable_cf_options.max_successive_merges),
       statistics(ioptions.statistics),
       merge_operator(ioptions.merge_operator),
-      info_log(ioptions.info_log) {}
+      info_log(ioptions.info_log),
+      pmem(ioptions.pmem) {}
 
 MemTable::MemTable(const InternalKeyComparator& cmp,
                    const ImmutableCFOptions& ioptions,
@@ -68,12 +69,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       refs_(0),
       kArenaBlockSize(OptimizeBlockSize(moptions_.arena_block_size)),
       mem_tracker_(write_buffer_manager),
-      arena_(
-          moptions_.arena_block_size,
-          (write_buffer_manager != nullptr && write_buffer_manager->enabled())
-              ? &mem_tracker_
-              : nullptr,
-          mutable_cf_options.memtable_huge_page_size),
+      arena_(moptions_.pmem),
       table_(ioptions.memtable_factory->CreateMemTableRep(
           comparator_, &arena_, mutable_cf_options.prefix_extractor.get(),
           ioptions.info_log, column_family_id)),

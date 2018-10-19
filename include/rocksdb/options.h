@@ -488,6 +488,9 @@ struct DBOptions {
   //   all log files in wal_dir and the dir itself is deleted
   std::string wal_dir = "";
 
+  // Path to persistent memory
+  std::string pmem = "/mnt/pmem/";
+
   // The periodicity when obsolete files get deleted. The default
   // value is 6 hours. The files that get out of scope by compaction
   // process will still get automatically delete on every compaction,
