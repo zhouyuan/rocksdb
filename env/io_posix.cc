@@ -14,6 +14,7 @@
 #include <algorithm>
 #if defined(OS_LINUX)
 #include <linux/fs.h>
+#include <libpmem.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -610,9 +611,7 @@ Status PosixMmapFile::Msync() {
   size_t p2 = TruncateToPageBoundary(dst_ - base_ - 1);
   last_sync_ = dst_;
   TEST_KILL_RANDOM("PosixMmapFile::Msync:0", rocksdb_kill_odds);
-  if (msync(base_ + p1, p2 - p1 + page_size_, MS_SYNC) < 0) {
-    return IOError("While msync", filename_, errno);
-  }
+  pmem_drain();
   return Status::OK();
 }
 
@@ -665,7 +664,7 @@ Status PosixMmapFile::Append(const Slice& data) {
 
     size_t n = (left <= avail) ? left : avail;
     assert(dst_);
-    memcpy(dst_, src, n);
+    pmem_memcpy_nodrain(dst_, src, n);
     dst_ += n;
     src += n;
     left -= n;
@@ -702,9 +701,6 @@ Status PosixMmapFile::Close() {
 Status PosixMmapFile::Flush() { return Status::OK(); }
 
 Status PosixMmapFile::Sync() {
-  if (fdatasync(fd_) < 0) {
-    return IOError("While fdatasync mmapped file", filename_, errno);
-  }
 
   return Msync();
 }
