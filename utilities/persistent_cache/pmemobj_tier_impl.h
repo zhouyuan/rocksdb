@@ -12,8 +12,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include <libpmemobj/persistent_ptr.hpp>
-#include <libpmemobj/p.hpp>
+#include <libpmemobj++/persistent_ptr.hpp>
+#include <libpmemobj++/p.hpp>
 #include <unordered_map>
 
 #include "rocksdb/cache.h"
@@ -49,8 +49,8 @@ struct pLRUElement {
 
   //virtual ~pLRUElement() { assert(!refs_); }
 
-  nvml::obj::persistent_ptr<T> next_;
-  nvml::obj::persistent_ptr<T> prev_;
+  pmem::obj::persistent_ptr<T> next_;
+  pmem::obj::persistent_ptr<T> prev_;
   std::atomic<size_t> refs_;
 };
 
@@ -142,13 +142,13 @@ class ObjCacheTier : public PersistentCacheTier {
   bool Evict();
 
   const bool is_compressed_ = true;    // does it store compressed data
-  std::unordered_map<std::string, nvml::obj::persistent_ptr<CacheData>> index;
+  std::unordered_map<std::string, pmem::obj::persistent_ptr<CacheData>> index;
   std::atomic<uint64_t> max_size_{0};  // Maximum size of the cache
   std::atomic<uint64_t> size_{0};      // Size of the cache
   Statistics stats_;
 	uint64_t last_id;
 
-	nvml::obj::pool<root> pop;
+	pmem::obj::pool<root> pop;
 };
 
 }  // namespace rocksdb

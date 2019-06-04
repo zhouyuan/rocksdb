@@ -43,7 +43,7 @@ if test -z "$OUTPUT"; then
 fi
 
 # we depend on C++11
-PLATFORM_CXXFLAGS="-std=c++11"
+PLATFORM_CXXFLAGS="-std=c++17"
 # we currently depend on POSIX platform
 COMMON_FLAGS="-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX"
 
@@ -124,7 +124,7 @@ case "$TARGET_OS" in
         if [ -z "$USE_CLANG" ]; then
             COMMON_FLAGS="$COMMON_FLAGS -fno-builtin-memcmp"
         fi
-        PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread -lrt"
+        PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread -lrt -lpmemobj"
         # PORT_FILES=port/linux/linux_specific.cc
         ;;
     SunOS)

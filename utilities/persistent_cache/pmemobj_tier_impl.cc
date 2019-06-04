@@ -6,7 +6,7 @@
 #ifndef ROCKSDB_LITE
 
 #include "utilities/persistent_cache/pmemobj_tier_impl.h"
-#include <libpmemobj/make_persistent_atomic.hpp>
+#include <libpmemobj++/make_persistent_atomic.hpp>
 #include <unistd.h>
 #include <string>
 
@@ -16,10 +16,10 @@ ObjCacheTier::ObjCacheTier(std::string path, size_t size,
 is_compressed_(is_compressed), max_size_(max_size), last_id(0) {
 
 	if (access(path.c_str(), F_OK) != 0) {
-	    pop = nvml::obj::pool<root>::create(path, "rocks_cache", size,
+	    pop = pmem::obj::pool<root>::create(path, "rocks_cache", size,
 	                             S_IRWXU);
 	} else {
-	    pop = nvml::obj::pool<root>::open(path, "rocks_cache");
+	    pop = pmem::obj::pool<root>::open(path, "rocks_cache");
 	    rebuild();
 	}
 }
@@ -31,7 +31,7 @@ ObjCacheTier::~ObjCacheTier() {
 void ObjCacheTier::rebuild() {
 	PMEMoid oid;
 	POBJ_FOREACH(pop.get_handle(), oid) {
-		nvml::obj::persistent_ptr<CacheData> nval = oid;
+		pmem::obj::persistent_ptr<CacheData> nval = oid;
 		std::string k(nval->key, nval->key_size);
 		index.insert({k, nval});
 	}
@@ -112,7 +112,7 @@ Status ObjCacheTier::Insert(const Slice& page_key, const char* data,
   assert(size_ >= size);
 
   // insert order: LRU, followed by index
-  nvml::obj::persistent_ptr<CacheData> cache_data;
+  pmem::obj::persistent_ptr<CacheData> cache_data;
   cachedata_args args;
   args.key = page_key.data();
   args.key_len = page_key.size();
@@ -140,7 +140,7 @@ Status ObjCacheTier::Insert(const Slice& page_key, const char* data,
 Status ObjCacheTier::Lookup(const Slice& page_key,
                                  std::unique_ptr<char[]>* result,
                                  size_t* size) {
-  nvml::obj::persistent_ptr<CacheData> kv;
+  pmem::obj::persistent_ptr<CacheData> kv;
 
   auto ret = index.find(page_key.ToString());
   if (ret != index.end()) {
@@ -181,7 +181,7 @@ size_t rand_a_b(size_t a, size_t b)
 
 bool ObjCacheTier::Evict()
 {
-	nvml::obj::persistent_ptr<CacheData> edata = nullptr;
+	pmem::obj::persistent_ptr<CacheData> edata = nullptr;
 	auto random_it = std::next(std::begin(index),
 		rand_a_b(0, index.size() - 1));
 	if (random_it == index.end())
@@ -201,7 +201,7 @@ bool ObjCacheTier::Evict()
 	// adjust size and destroy data
 	size_ -= edata->value_size;
 
-	nvml::obj::delete_persistent_atomic<CacheData>(edata);
+	pmem::obj::delete_persistent_atomic<CacheData>(edata);
 
 	return true;
 }
